@@ -3,7 +3,7 @@
 
 We aim to complete battle track and championship track.
 This git will be used to develop an agent in the context of an internship in Japan.
-The participants are Mathis Foussac and Juliette Petit
+The participants are Mathis Foussac and Juliette Petit.
 
 ## Rules:
 
@@ -107,16 +107,19 @@ damage = (attack - defense) * move_power * type_bonus * STAB * weather_bonus
  
  **Pokémon Team Building**
 - Pokémon teams are not permitted to have duplicate specimens.
-
+<br>
+<br>
 
 
 *Pokémon official chart* 
-![typechart](/typechart.png)
+
+![typechart](/typechart.png) 
+
 (Source: https://pt.m.wikipedia.org/wiki/Ficheiro:Pokemon_Type_Chart.svg)
 
 ### Battle track specific rules:
 
-- the stats points mentioned before are randomly choose
+- the stats points mentioned before are randomly chosen
 - Teams are composed of 3 to 6 Pokémon
 
 ### Championship track specific rules:
