@@ -5,6 +5,10 @@ We aim to complete battle track and championship track.
 This git will be used to develop an agent in the context of an internship in Japan.
 The participants are Mathis Foussac and Juliette Petit.
 
+**game's summary**
+This is a simplified Pokémon game. In short, this is a 1v1 turn-based game, where each player have several Pokémon to fight. The winner is the one to knock out every opponent's Pokémon.
+The rules are specified [later in the document](#general-gameplay-rules).
+
 ## Rules:
 
 ### Competition rules:
