@@ -111,7 +111,7 @@ damage = (attack - defense) * move_power * type_bonus * STAB * weather_bonus
 
 
 *Pokémon official chart* 
-![typechart](/competition-vgc/typechart.png)
+![typechart](/typechart.png)
 (Source: https://pt.m.wikipedia.org/wiki/Ficheiro:Pokemon_Type_Chart.svg)
 
 ### Battle track specific rules:
