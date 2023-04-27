@@ -255,7 +255,7 @@ class Minimax(BattlePolicy):
             for i in range(DEFAULT_N_ACTIONS):
                 for j in range(DEFAULT_N_ACTIONS):  # opponent acts with his best interest, we iterate all joint actions
                     s, _, _, _ = current_parent.g.step([i, j])  # opponent select an invalid switch action
-                    # gnore any node in which any of the agent's Pokemon faints
+                    # ignore any node in which any of the agent's Pokemon faints
                     if s[0].teams[0].active.hp == 0:
                         continue
                     elif s[0].teams[1].active.hp == 0:
@@ -432,3 +432,167 @@ class GUIPlayer(BattlePolicy):
 
     def close(self):
         self.window.close()
+
+class FirstPlayer(BattlePolicy):
+    """
+    Agent rules based
+    """
+
+    # list of types : return [[not efficient against], [weak against]]
+    def typesChart(self,type: PkmType) -> list[list] :
+        if (type == 0):
+            return [[12, 16], []]
+        elif (type == 1):
+            return [[],[]]
+
+    def __init__(self, switch_probability: float = .15, n_moves: int = DEFAULT_PKM_N_MOVES,
+                 n_switches: int = DEFAULT_PARTY_SIZE):
+        super().__init__()
+        self.n_actions: int = n_moves + n_switches
+        self.pi: List[float] = ([(1. - switch_probability) / n_moves] * n_moves) + (
+                [switch_probability / n_switches] * n_switches)
+
+    def requires_encode(self) -> bool:
+        return False
+
+    def close(self):
+        pass
+
+    def get_action(self, g: GameState) -> int:
+       
+        # get weather condition
+        weather = g.weather.condition
+
+        # get my pkms
+        my_team = g.teams[0]
+        my_active = my_team.active
+        my_pkms = [my_active] + my_team.party
+
+        # get opp team
+        opp_team = g.teams[1]
+        opp_active = opp_team.active
+        opp_active_type = opp_active.type
+        opp_defense_stage = opp_team.stage[PkmStat.DEFENSE]
+
+        # if it's raining 
+        if(weather == 2):
+            # switch if my active pokemon is fire and one of my pkm is not
+            if(my_active.type == 1 and (my_team.party[0].type != 1 or my_team.party[1].type != 1)):
+                # if my team have a water pokemon I will take it
+                if(my_team.party[0].type == 2 or my_team.party[1].type == 1 ):
+                    #switch if alive
+                    if(not my_team.party[0].fainted):
+                        return 4
+                # else I will take one that is not fire
+                else: 
+                    #switch if alive
+                    if(not my_team.party[1].fainted):
+                        return 5
+            else:
+                pass
+
+            # switch if I have a water pokemon 
+            if(my_team.party[0].type == 2):
+                # switch if alive
+                if(not my_team.party[0].fainted):
+                        return 4
+            elif(my_team.party[1].type == 2):
+                # switch if alive
+                if(not my_team.party[1].fainted):
+                        return 5
+            else:
+                pass
+
+
+        # if pkm is strong, or is the only one alive, he uses his best attack
+        if (strong(my_active.type, opp_active_type) or (my_team.party[0].fainted and my_team.party[1].fainted)):
+            # estimate damage my active pkm moves
+            damage: List[float] = []
+            for move in my_active.moves:
+                damage.append(estimate_damage(move.type, my_active.type, move.power, opp_active.type, my_team.stage[PkmStat.ATTACK],
+                                            opp_defense_stage, weather))
+
+            # get most damaging move
+            return int(np.argmax(damage))
+        
+        # if opp pkm makes no damage and I do, I attack (least damage)  => I am not strong
+        if (receive_null_dmg(my_active.type, opp_active_type)):
+            # estimate damage my active pkm moves
+            damage: List[float] = []
+            for move in my_active.moves:
+                damage.append(estimate_damage(move.type, my_active.type, move.power, opp_active.type, my_team.stage[PkmStat.ATTACK],
+                                            opp_defense_stage, weather))
+
+            # get least damaging move to save the most powerful to later
+            return int(np.argmin(damage))
+        
+        # if one of my other pkm has this (and I don't), I switch
+            # with the first 
+        if(strong(my_team.party[0].type, opp_active_type) or receive_null_dmg(my_team.party[0].type, opp_active_type)):
+            #switch if alive
+            if(not my_team.party[0].fainted):
+                return 4 
+            # with the second
+        if(strong(my_team.party[1].type, opp_active_type) or receive_null_dmg(my_team.party[1].type, opp_active_type)):
+            #switch if alive
+            if(not my_team.party[1].fainted):
+                return 5
+            
+        # if all my pokemon are weak against opponent
+            # I switch if the active one is dealing 0 dmg or is confused or paralyze
+        if(TYPE_CHART_MULTIPLIER[my_active][opp_active] == 0 or my_active.status==1 or my_active.status==3):
+            if(strong(my_team.party[0].type, opp_active_type) or receive_null_dmg(my_team.party[0].type, opp_active_type)):
+                #switch if alive
+                if(not my_team.party[0].fainted):
+                    return 4 
+            else:
+                return 5
+            # I don't switch if I have stages
+        #if()
+            # I switch if I'm under 100 hp or the opp is strong against me and not the others
+        if(strong(opp_active, my_active) and not strong(opp_active, my_team.party[0])):
+            #switch if alive
+            if(not my_team.party[0].fainted):
+                return 4 
+        elif(strong(opp_active, my_active) and not strong(opp_active, my_team.party[1])):
+            #switch if alive
+            if(not my_team.party[1].fainted):
+                return 5
+            
+        # strongest attack
+        # estimate damage my active pkm moves
+        damage: List[float] = []
+        for move in my_active.moves:
+            damage.append(estimate_damage(move.type, my_active.type, move.power, opp_active.type, my_team.stage[PkmStat.ATTACK],
+                                        opp_defense_stage, weather))
+
+        # get least damaging move to save the most powerful to later
+        return int(np.argmax(damage))
+
+def strong(my_pkm : PkmType, opp_pkm : PkmType) -> bool:
+    return TYPE_CHART_MULTIPLIER[my_pkm][opp_pkm] == 2.
+
+def receive_null_dmg(my_pkm : PkmType, opp_pkm : PkmType) -> bool :
+    opp_Null =  TYPE_CHART_MULTIPLIER[opp_pkm][my_pkm] == 0.
+    my_pkm_not_null =  TYPE_CHART_MULTIPLIER[my_pkm][opp_pkm] != 0.
+    return opp_Null & my_pkm_not_null
+
+def estimate_damage(move_type: PkmType, pkm_type: PkmType, move_power: float, opp_pkm_type: PkmType,
+                    attack_stage: int, defense_stage: int, weather: WeatherCondition) -> float:
+    stab = 1.5 if move_type == pkm_type else 1.
+    if (move_type == PkmType.WATER and weather == WeatherCondition.RAIN) or (
+            move_type == PkmType.FIRE and weather == WeatherCondition.SUNNY):
+        weather = 1.5
+    elif (move_type == PkmType.WATER and weather == WeatherCondition.SUNNY) or (
+            move_type == PkmType.FIRE and weather == WeatherCondition.RAIN):
+        weather = .5
+    else:
+        weather = 1.
+    stage_level = attack_stage - defense_stage
+    stage = (stage_level + 2.) / 2 if stage_level >= 0. else 2. / (np.abs(stage_level) + 2.)
+    damage = TYPE_CHART_MULTIPLIER[move_type][opp_pkm_type] * stab * weather * stage * move_power
+    return damage
+
+
+
+    

@@ -3,10 +3,12 @@ from multiprocessing.connection import Client
 from vgc.engine.PkmBattleEnv import PkmBattleEnv
 
 from vgc.behaviour.BattlePolicies import RandomPlayer
+from vgc.behaviour.BattlePolicies import Minimax
+from vgc.behaviour.BattlePolicies import FirstPlayer
 from vgc.util.generator.PkmTeamGenerators import RandomTeamGenerator
 
-a0 = RandomPlayer()
-a1 = RandomPlayer()
+a0 = FirstPlayer()
+a1 = Minimax()
 address = ('localhost', 8000)
 gen = RandomTeamGenerator()
 full_team0 = gen.get_team()
@@ -25,6 +27,7 @@ while ep < n_battles:
     while not t:
         a = [a0.get_action(s[0]), a1.get_action(s[1])]
         s, _, t, v = env.step(a)
+
         env.render(mode='ux')
     t = False
 env.close()
