@@ -438,13 +438,6 @@ class FirstPlayer(BattlePolicy):
     Agent rules based
     """
 
-    # list of types : return [[not efficient against], [weak against]]
-    def typesChart(self,type: PkmType) -> list[list] :
-        if (type == 0):
-            return [[12, 16], []]
-        elif (type == 1):
-            return [[],[]]
-
     def __init__(self, switch_probability: float = .15, n_moves: int = DEFAULT_PKM_N_MOVES,
                  n_switches: int = DEFAULT_PARTY_SIZE):
         super().__init__()
@@ -459,14 +452,12 @@ class FirstPlayer(BattlePolicy):
         pass
 
     def get_action(self, g: GameState) -> int:
-       
         # get weather condition
         weather = g.weather.condition
 
         # get my pkms
         my_team = g.teams[0]
         my_active = my_team.active
-        my_pkms = [my_active] + my_team.party
 
         # get opp team
         opp_team = g.teams[1]
@@ -474,32 +465,21 @@ class FirstPlayer(BattlePolicy):
         opp_active_type = opp_active.type
         opp_defense_stage = opp_team.stage[PkmStat.DEFENSE]
 
+        # if it's sunny
+        if(weather == 1):
+            deal_with_weather(my_active.type, my_team.party[0], my_team.party[1], 2, 1)
+
         # if it's raining 
         if(weather == 2):
-            # switch if my active pokemon is fire and one of my pkm is not
-            if(my_active.type == 1 and (my_team.party[0].type != 1 or my_team.party[1].type != 1)):
-                # if my team have a water pokemon I will take it
-                if(my_team.party[0].type == 2 or my_team.party[1].type == 1 ):
-                    #switch if alive
-                    if(not my_team.party[0].fainted):
-                        return 4
-                # else I will take one that is not fire
-                else: 
-                    #switch if alive
-                    if(not my_team.party[1].fainted):
-                        return 5
-            else:
-                pass
+            deal_with_weather(my_active.type, my_team.party[0], my_team.party[1], 1, 2)
 
-            # switch if I have a water pokemon 
-            if(my_team.party[0].type == 2):
-                # switch if alive
-                if(not my_team.party[0].fainted):
-                        return 4
-            elif(my_team.party[1].type == 2):
-                # switch if alive
-                if(not my_team.party[1].fainted):
-                        return 5
+        # if there is a sandstorm
+        if(weather == 3):
+            # I switch to a rock if i have one
+            if(my_team.party[0].type == 3):
+                switch(my_team.party[0], 0)
+            elif(my_team.party[1].type == 3):
+                switch(my_team.party[1], 1)
             else:
                 pass
 
@@ -529,35 +509,25 @@ class FirstPlayer(BattlePolicy):
         # if one of my other pkm has this (and I don't), I switch
             # with the first 
         if(strong(my_team.party[0].type, opp_active_type) or receive_null_dmg(my_team.party[0].type, opp_active_type)):
-            #switch if alive
-            if(not my_team.party[0].fainted):
-                return 4 
+            switch(my_team.party[0],0)
             # with the second
         if(strong(my_team.party[1].type, opp_active_type) or receive_null_dmg(my_team.party[1].type, opp_active_type)):
-            #switch if alive
-            if(not my_team.party[1].fainted):
-                return 5
+            switch(my_team.party[1],1)
             
         # if all my pokemon are weak against opponent
-            # I switch if the active one is dealing 0 dmg or is confused or paralyze
+            # I switch if the active one is dealing 0 dmg or is confused or paralyzed
         if(TYPE_CHART_MULTIPLIER[my_active][opp_active] == 0 or my_active.status==1 or my_active.status==3):
             if(strong(my_team.party[0].type, opp_active_type) or receive_null_dmg(my_team.party[0].type, opp_active_type)):
-                #switch if alive
-                if(not my_team.party[0].fainted):
-                    return 4 
+                switch(my_team.party[0],0)
             else:
-                return 5
+                switch(my_team.party[1],1)
             # I don't switch if I have stages
         #if()
             # I switch if I'm under 100 hp or the opp is strong against me and not the others
         if(strong(opp_active, my_active) and not strong(opp_active, my_team.party[0])):
-            #switch if alive
-            if(not my_team.party[0].fainted):
-                return 4 
+            switch(my_team.party[0],0)
         elif(strong(opp_active, my_active) and not strong(opp_active, my_team.party[1])):
-            #switch if alive
-            if(not my_team.party[1].fainted):
-                return 5
+            switch(my_team.party[1],1)
             
         # strongest attack
         # estimate damage my active pkm moves
@@ -566,7 +536,7 @@ class FirstPlayer(BattlePolicy):
             damage.append(estimate_damage(move.type, my_active.type, move.power, opp_active.type, my_team.stage[PkmStat.ATTACK],
                                         opp_defense_stage, weather))
 
-        # get least damaging move to save the most powerful to later
+        # get least damaging move to save the most powerful for later
         return int(np.argmax(damage))
 
 def strong(my_pkm : PkmType, opp_pkm : PkmType) -> bool:
@@ -593,6 +563,31 @@ def estimate_damage(move_type: PkmType, pkm_type: PkmType, move_power: float, op
     damage = TYPE_CHART_MULTIPLIER[move_type][opp_pkm_type] * stab * weather * stage * move_power
     return damage
 
+def switch(pkm, nb: int):
+    # switch if alive
+    if(not pkm.fainted):
+        if(nb == 0):
+            return 4
+        else:
+            return 5
 
+def deal_with_weather(my_active_type: PkmType, first_pkm, second_pkm, type_avoided: PkmType, type_wanted: PkmType):
+    # switch if my active pokemon is of the avoided type and one of my pkm is not
+    if(my_active_type == type_avoided and (first_pkm.type != type_avoided or second_pkm.type != type_avoided)):
+        # if my team have a wanted type pokemon, I will take it
+        if(first_pkm.type == type_wanted or second_pkm.type == type_avoided or  first_pkm.hp > second_pkm.hp):
+            switch(first_pkm,0)
+        # else I will take one that is not of the avoided type
+        else: 
+            switch(second_pkm,1)
+    else:
+        pass
 
-    
+    # switch if I have a wanted type pokemon 
+    if(first_pkm.type == type_wanted):
+        switch(first_pkm,0)
+    elif(second_pkm.type == type_wanted):
+        # switch if alive
+        switch(second_pkm,1)
+    else:
+        pass

@@ -2,7 +2,7 @@ from multiprocessing.connection import Client
 
 from vgc.engine.PkmBattleEnv import PkmBattleEnv
 
-from vgc.behaviour.BattlePolicies import RandomPlayer
+from vgc.behaviour.BattlePolicies import PrunedBFS
 from vgc.behaviour.BattlePolicies import Minimax
 from vgc.behaviour.BattlePolicies import FirstPlayer
 from vgc.util.generator.PkmTeamGenerators import RandomTeamGenerator
