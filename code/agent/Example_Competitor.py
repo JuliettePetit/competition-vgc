@@ -1,5 +1,5 @@
 from vgc.behaviour import BattlePolicy, TeamSelectionPolicy
-from vgc.behaviour.BattlePolicies import GUIPlayer, RandomPlayer
+from vgc.behaviour.BattlePolicies import GUIPlayer, RandomPlayer, RuleBased
 from vgc.behaviour.TeamSelectionPolicies import GUITeamSelectionPolicy
 from vgc.competition.Competitor import Competitor
 
@@ -18,6 +18,20 @@ class ExampleCompetitor(Competitor):
     def battle_policy(self) -> BattlePolicy:
         return self._battle_policy
 
+
+class RuleBasedCompetitor(Competitor):
+
+    def __init__(self, name: str = "Rule Based"):
+        self._name = name
+        self._battle_policy = RuleBased()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def battle_policy(self) -> BattlePolicy:
+        return RuleBased()
 
 class GUIExampleCompetitor(ExampleCompetitor):
 

@@ -5,7 +5,7 @@ from vgc.ecosystem.BattleEcosystem import BattleEcosystem
 from vgc.util.generator.PkmRosterGenerators import RandomPkmRosterGenerator
 from vgc.util.generator.PkmTeamGenerators import RandomTeamFromRoster
 
-N_PLAYERS = 16
+N_PLAYERS = 4
 
 
 def main():
@@ -16,7 +16,7 @@ def main():
         cm = CompetitorManager(ExampleCompetitor("Player %d" % i))
         cm.team = RandomTeamFromRoster(roster).get_team()
         le.register(cm)
-    le.run(10)
+    le.run(1)
 
 
 if __name__ == '__main__':

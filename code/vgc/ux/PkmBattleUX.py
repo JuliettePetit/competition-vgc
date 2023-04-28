@@ -1,10 +1,10 @@
+import arcade
 import abc
 import threading
 import time
 from multiprocessing.connection import Listener
 from typing import List, Tuple
 
-import arcade
 
 from vgc.datatypes.Types import PkmType, PkmStat
 # Set constants for the screen size
