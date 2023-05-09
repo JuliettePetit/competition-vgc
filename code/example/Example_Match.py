@@ -1,5 +1,6 @@
-from agent.Example_Competitor import ExampleCompetitor, RuleBasedCompetitor
-from vgc.behaviour.BattlePolicies import Minimax, RuleBased
+from agent.Example_Competitor import ExampleCompetitor
+from myAgent.AlphaBeta import AlphaBetaCompetitor
+from vgc.behaviour.BattlePolicies import Minimax
 from vgc.competition.BattleMatch import BattleMatch
 from vgc.competition.Competitor import CompetitorManager
 from vgc.util.generator.PkmRosterGenerators import RandomPkmRosterGenerator
@@ -9,8 +10,7 @@ from vgc.util.generator.PkmTeamGenerators import RandomTeamFromRoster
 def main():
     roster = RandomPkmRosterGenerator().gen_roster()
     tg = RandomTeamFromRoster(roster)
-    c0 = ExampleCompetitor("Player 1")
-    c0._battle_policy = RuleBased()  # switch agent to test
+    c0 = AlphaBetaCompetitor("Player 1")
     cm0 = CompetitorManager(c0)
     cm0.team = tg.get_team()
     c1 = ExampleCompetitor("Rule based competitor")

@@ -423,141 +423,15 @@ class GUIPlayer(BattlePolicy):
         self.window.close()
 
 
-class AlphaBetaPruned(BattlePolicy):
-    def __init__(self, depth: int):
-        self.depth = 3
-        #we can't really take the real impact of status so we give modifiers.
-        #here, confused, asleep, paralyzed and frozen all give 0 because we always take the "worst case for us" (the min), this means that, in our calculations, the opponent will always break free in 1 turn, or ignore the ailment.
-            
-        self.worst_case_status = [PkmStatus.PARALYZED, PkmStatus.FROZEN]
 
-        
+def find_possible_actions_stripped(moves: List[PkmMove], pkm_type: PkmType, opp_pkm_type: PkmType, attack_stage: int, defense_stage: int, weather: WeatherCondition, party: List[Pkm]) -> List[int]:
+    actions = []
+    actions.append(find_best_damaging_move(moves, pkm_type, opp_pkm_type, attack_stage, defense_stage, weather))
+    for i, pkm in enumerate(party):
+        if not pkm.fainted():
+            actions.append(i + 4)
+    return actions
 
-    def requires_encode(self) -> bool:
-        return False
-
-    def close(self):
-        pass
-
-    def get_action(self, g: GameState) -> int:
-        print("-----------------")
-        player = 0
-        tree = GameMatrix(g, 0)
-        for i in range(DEFAULT_N_ACTIONS):
-            for a in range(DEFAULT_N_ACTIONS):
-                pass
-
-
-    def alpha_beta_evaluation(self, state: GameMatrix, parent_state: GameMatrix)-> int:
-        my_team = g.teams[0]
-        my_active = my_team.active
-        my_moves = my_active.moves
-
-        opp_team = g.teams[1]
-        opp_active = opp_team.active
-        opp_moves = opp_active.moves
-        
-    
-        
-    def take_step(self, g: GameState, opp_choice: int, my_choice: int)-> GameMatrix:
-        """
-            simulate a battle round with certain specificities
-
-            since we take te worst case for us, we will consider that :
-                - every status that is not mandatory (ie. that is not burned or poisoned) will take effect EVERYTIME for us, and NEVER for the ennemy
-                - we always go second if there is a speed tie
-        """
-
-        player_0_attack = my_choice < DEFAULT_PKM_N_MOVES
-        player_1_attack = my_choice < DEFAULT_PKM_N_MOVES
-
-        self.simulate_switch(g, [my_choice, opp_choice])
-
-
-        will_play = self.will_play_next_turn(g.teams[0])
-
-        if player_1_attack:
-            self.simulate_attack(g.teams[1].active,g.teams[0].active, g.teams[1].stage, g.teams[0].stage, g.teams[1].active.moves[opp_choice])
-
-        if player_0_attack:
-            if will_play:
-                self.simulate_attack(g.teams[0].active,g.teams[1].active, g.teams[0].stage, g.teams[1].stage, g.teams[0].active.moves[my_choice])
-            if g.teams[0].confused:
-                g.teams[0].active.hp -= STATE_DAMAGE
-
-        self.simulate_weather_damage(g)
-        self.simulate_status_damage(g)
-
-        self.simulate_post_battle(g)
-
-        return GameMatrix(g, will_play)
-
-    def simulate_weather_damage(self, g: GameState):
-        for team in g.teams:
-            pkm = team.active
-            if will_take_weather_damage(pkm, g.weather.condition):
-                pkm.hp = max(0, pkm.hp - STATE_DAMAGE)
-
-    def simulate_status_damage(self, g: GameState):
-        for team in g.teams:
-            pkm = team.active
-            if pkm.status == PkmStatus.POISONED or pkm.status == PkmStatus.BURNED:
-                pkm.hp = max(0, pkm.hp - STATE_DAMAGE)
-    
-    def simulate_post_battle(self, g: GameState):
-        if self.weather.condition != WeatherCondition.CLEAR:
-            self.n_turns_no_clear += 1
-
-            # clear weather if appropriated
-            if self.n_turns_no_clear > 5:
-                self.weather.condition = WeatherCondition.CLEAR
-                self.n_turns_no_clear = 0
-
-
-    def simulate_switch(self, g: GameState, actions: List[int]):
-        """
-            there is no randomness in a switch, this means that this code is, except for a few small changes, the one used in the switch of the PkmBatleEnv file (minus the print statements)
-        """
-        for i, team in enumerate(g.teams):
-            pos = actions[i] - DEFAULT_PKM_N_MOVES
-            if 0 <= pos < (team.size() - 1):
-                if not team.party[pos].fainted():
-                    team.switch(pos)
-                    deal_hazard_damage(g, team.active)
-                    
-
-    def simulate_attack(self, my_pkm: Pkm,opp_pkm: Pkm, my_stages: List[int], opp_stages: List[int], move: PkmMove):
-
-
-        if move.pp > 0:
-            move.pp -= 1
-        else:
-            move = Struggle
-
-
-        fixed_damage = move.fixed_damage
-        if fixed_damage > 0. and TYPE_CHART_MULTIPLIER[move.type][opp_pkm.type] > 0.:
-            damage = fixed_damage
-        else:
-            stab = 1.5 if move.type == opp_pkm.type else 1.
-            if (move.type == PkmType.WATER and self.weather.condition == WeatherCondition.RAIN) or (
-                    move.type == PkmType.FIRE and self.weather.condition == WeatherCondition.SUNNY):
-                weather = 1.5
-            elif (move.type == PkmType.WATER and self.weather.condition == WeatherCondition.SUNNY) or (
-                    move.type == PkmType.FIRE and self.weather.condition == WeatherCondition.RAIN):
-                weather = .5
-            else:
-                weather = 1.
-            stage_level = my_stages[PkmStat.ATTACK] - opp_stages[PkmStat.DEFENSE]
-            stage = (stage_level + 2.) / 2 if stage_level >= 0. else 2. / (np.abs(stage_level) + 2.)
-            multiplier = TYPE_CHART_MULTIPLIER[move.type][opp_pkm.type] if move != Struggle else 1.0
-            damage = multiplier * stab * weather * stage * move.power
-        opp_pkm.hp = max(0, opp_pkm.hp - damage)
-        my_pkm.hp = min(my_pkm.max_hp, my_pkm.hp + move.recover)
-
-
-    def will_play_next_turn(self, team: PkmTeam) -> bool:
-        return team.active.status in self.worst_case_status or ((team.confused or team.active.asleep()) and will_free_next_turn(team))
 
 
 def will_take_weather_damage(pkm: Pkm, weather: WeatherCondition):
@@ -576,38 +450,28 @@ def will_free_next_turn(team: PkmTeam):
     return (team.n_turns_confused == 3 or not team.confused) and (not team.active.asleep() or team.active.n_turns_asleep == 3 )
 
 
+def estimate_damage(move_type: PkmType, pkm_type: PkmType, move_power: float, opp_pkm_type: PkmType,
+                    attack_stage: int, defense_stage: int, weather: WeatherCondition) -> float:
+    stab = 1.5 if move_type == pkm_type else 1.
+    if (move_type == PkmType.WATER and weather == WeatherCondition.RAIN) or (
+            move_type == PkmType.FIRE and weather == WeatherCondition.SUNNY):
+        weather = 1.5
+    elif (move_type == PkmType.WATER and weather == WeatherCondition.SUNNY) or (
+            move_type == PkmType.FIRE and weather == WeatherCondition.RAIN):
+        weather = .5
+    else:
+        weather = 1.
+    stage_level = attack_stage - defense_stage
+    stage = (stage_level + 2.) / 2 if stage_level >= 0. else 2. / (np.abs(stage_level) + 2.)
+    damage = TYPE_CHART_MULTIPLIER[move_type][opp_pkm_type] * stab * weather * stage * move_power
+    return damage
 
-
-class GameMatrix():
-    def __init__(self, state: GameState, player_has_played : bool):
-        self.state: GameState = state
-        self.value = 0
-        self.is_goal = state.teams[1].active.fainted()
-        self.player_has_played = player_has_played
-
-        '''
-            payoff matrix, with a shape of :
-                                                    opp_move
-                                move1   move2   move3   move4   swch1   swch2
-                    move1   [    res     res     res     res     res     res    ]
-                    move2   [    res     res     res     res     res     res    ]
-            my_move move3   [    res     res     res     res     res     res    ]
-                    move4   [    res     res     res     res     res     res    ]
-                    swch1   [    res     res     res     res     res     res    ]
-                    swch2   [    res     res     res     res     res     res    ]
-
-        '''
-        self.matrix: List[List[tuple(int, GameMatrix)]] = [ [tuple(0, None) * DEFAULT_N_ACTIONS] * DEFAULT_N_ACTIONS ] 
-        print(self.matrix)
-
-    def evaluate(self,parent: GameMatrix, fct: callable):
-        self.value = fct(self.state, parent)
-
-    def set_payoff(self, moves:tuple(int,int), value: int, state: GameMatrix ):
-        self.matrix[moves[0]][moves[1]] = tuple(value, state)
-    
-
-
-
-
-
+def find_best_damaging_move(moves: List[PkmMove], pkm_type: PkmType, opp_pkm_type: PkmType, attack_stage: int, defense_stage: int, weather: WeatherCondition) -> int:
+    best_damage = 0
+    best_move = None
+    for move in moves:
+        damage = estimate_damage(move.type, pkm_type, opp_pkm_type, move.power, attack_stage, defense_stage, weather)
+        if damage >= best_damage:
+            best_damage = damage
+            best_move = move
+    return moves.index(best_move)
