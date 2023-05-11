@@ -7,8 +7,8 @@ import numpy as np
 
 from vgc.behaviour import BattlePolicy
 from vgc.competition.Competitor import Competitor
-from vgc.competition.StandardPkmMoves import Struggle
-from vgc.datatypes.Constants import DEFAULT_PKM_N_MOVES, SPIKES_2, SPIKES_3, STATE_DAMAGE, TYPE_CHART_MULTIPLIER
+from vgc.competition.StandardPkmMoves import STANDARD_MOVE_ROSTER, Struggle
+from vgc.datatypes.Constants import DEFAULT_PKM_N_MOVES, MOVE_POWER_MAX, MOVE_POWER_MIN, SPIKES_2, SPIKES_3, STATE_DAMAGE, TYPE_CHART_MULTIPLIER
 from vgc.datatypes.Objects import GameState, Pkm, PkmMove, PkmTeam
 from vgc.datatypes.Types import PkmEntryHazard, PkmStat, PkmStatus, PkmType, WeatherCondition
 
@@ -38,14 +38,14 @@ class AlphaBeta(BattlePolicy):
         pass
 
     def get_action(self, g: GameState) -> int:
-        print("-----------------")
+
         origin = AlphaBetaNode(g.teams[0], g.teams[1], g.weather, None, 0, 0, True, -1)
         depth = 0
         current_parent = origin
         nodes_stack = [origin]
 
         #recursive version:
-        node: AlphaBetaNode = self.alpha_beta_search(origin, g, 0, -1000, 1000)[1]
+        val,node= self.alpha_beta_search(origin, g, 0, -10000, 10000)
 
 
         #non-recursive version
@@ -60,17 +60,28 @@ class AlphaBeta(BattlePolicy):
         '''
 
         choice_node: AlphaBetaNode = node
-        print('------------------------------------------------------')
-        print(node.value)
-        print(node.action)
+        #print('------------------------------------------------------')
+        #print(f'node val : {val}')
+        #print("tree :")
+        total = [origin]
+        queue = [origin]
+        while len(queue) > 0:
+            node = queue.pop()
+            queue += node.children
+            total += node.children
+            #print("\n\n\n------")
+            #print(node)
 
         while not node == origin:
-            choice_node = node
-            node = choice_node.parent
+            if node.player == 0:
+                choice_node = node
+            node = node.parent
             
 
-
-        print(choice_node.action)
+        #print('choice :')
+        #print(choice_node.value)
+        #print(choice_node.action)
+        #print(self._max_depth)
         return choice_node.action
 
                 
@@ -82,26 +93,19 @@ class AlphaBeta(BattlePolicy):
         """
             recursive version of the alpha beta algorithm in all of it's spaghetti code beauty
         """
-        print('------------------------------------------------------------')
-        print("PARENT :")
-        print(f'player : {node.player} \naction : {node.action}')
-        print(f'possible actions : {node.possible_action}')
-        print(f"depth : {depth}")
 
-        print('\n')
 
         if len(node.possible_action) <= 0 or (depth >= self._max_depth and node.turn_end) or node.is_terminal:
-            print("node value and choice, end of tree")
-            print(node.value)
-            print(node.action)
+
             return node.value, node
         else:
             new_node: AlphaBetaNode = None
             for action in node.possible_action:
                 new_g = deepcopy(g)
                 new_state = self.take_step(node, new_g, action[1], not node.turn_end, action[0])
+                node.add_child(new_state)
                 if node.player == 0:
-                    value = -1000
+                    value = -10000
                     val, new_node = self.alpha_beta_search(new_state, new_g, depth + 1, alpha, beta)
                     value = max(value, val)
                     if value > beta:
@@ -109,13 +113,13 @@ class AlphaBeta(BattlePolicy):
                     alpha = max(alpha, value)
                     
                 else:
-                    value = 1000
+                    value = 10000
                     val, new_node = self.alpha_beta_search(new_state, new_g, depth + 1, alpha, beta)
                     value = min(value, val)
                     if value < alpha:
                         break
                     beta = min(beta, value)
-
+            
             return new_node.value, new_node
             
 
@@ -150,17 +154,16 @@ class AlphaBeta(BattlePolicy):
         will_play = True
         if (player == 0):
             will_play = self.will_play_next_turn(g.teams[0])
-        
         if player_attack:
             if will_play:
-                self.simulate_attack(g.teams[player].active,g.teams[(player + 1) % 2].active, g.teams[player].stage, g.teams[(player + 1) %2].stage, g.teams[player].active.moves[my_choice], g.weather)
+                self.simulate_attack(g.teams[player].active,g.teams[(player + 1) % 2].active, g.teams[player].stage, g.teams[(player + 1) %2].stage, g.teams[player].active.moves[my_choice], g.weather, parent.pre_switch_type)
                 if g.teams[player].confused:
                     g.teams[player].active.hp -= STATE_DAMAGE
         if should_turn_end:
             self.simulate_weather_damage(g)
             self.simulate_status_damage(g)
             self.simulate_post_battle(g)
-        return AlphaBetaNode(g.teams[0], g.teams[1], g.weather, parent, parent.get_next_attacking_player(), parent.depth + 1, should_turn_end, my_choice)
+        return AlphaBetaNode(g.teams[0], g.teams[1], g.weather, parent, player, parent.depth + 1, should_turn_end, my_choice)
 
     def simulate_weather_damage(self, g: GameState):
         """
@@ -185,10 +188,10 @@ class AlphaBeta(BattlePolicy):
         simulate if the weather will be cleared or not
         """
         if g.weather.condition != WeatherCondition.CLEAR:
-            g.n_turns_no_clear += 1
-            if g.n_turns_no_clear > 5:
+            g.weather.n_turns_no_clear += 1
+            if g.weather.n_turns_no_clear > 5:
                 g.weather.condition = WeatherCondition.CLEAR
-                g.n_turns_no_clear = 0
+                g.weather.n_turns_no_clear = 0
 
 
     def simulate_switch(self, g: GameState, action: int, player:int ):
@@ -203,19 +206,22 @@ class AlphaBeta(BattlePolicy):
                 deal_hazard_damage(g.teams[player], g.teams[player].active)
                     
 
-    def simulate_attack(self, my_pkm: Pkm,opp_pkm: Pkm, my_stages: List[int], opp_stages: List[int], move: PkmMove, weather_condition: WeatherCondition):
+    def simulate_attack(self, my_pkm: Pkm,opp_pkm: Pkm, my_stages: List[int], opp_stages: List[int], move: PkmMove, weather_condition: WeatherCondition, old_type: PkmType):
         """
             simulate one attack
         """
-        if move.pp > 0:
+
+        if not move.revealed:
+            move = find_best_move(old_type)
+        elif move.pp > 0 :
             move.pp -= 1
+            
+
         else:
             move = Struggle
-
-        fixed_damage = move.fixed_damage
-
-        if fixed_damage > 0. and TYPE_CHART_MULTIPLIER[move.type][opp_pkm.type] > 0.:
-            damage = fixed_damage
+            
+        if move.fixed_damage > 0. and TYPE_CHART_MULTIPLIER[type][opp_pkm.type] > 0.:
+            damage = move.fixed_damage
         else:
             damage = estimate_damage(move.type, my_pkm.type, move.power, opp_pkm.type, my_stages[PkmStat.ATTACK], opp_stages[PkmStat.DEFENSE], weather_condition)
 
@@ -223,49 +229,60 @@ class AlphaBeta(BattlePolicy):
         my_pkm.hp = min(my_pkm.max_hp, my_pkm.hp + move.recover)
 
 
+
     def will_play_next_turn(self, team: PkmTeam) -> bool:
         """
             return true only if we are sure that our player WILL play the next turn (he doesn't have any status problem)
         """
-        return team.active.status in self.worst_case_status or ((team.confused or team.active.asleep()) and will_free_next_turn(team))
+        return True #not team.active.status in self.worst_case_status or (not (team.confused or team.active.asleep()) and will_free_next_turn(team))
     
+def find_best_move(pkm_type: PkmType):
+    max_dmg = 0
+    best_move = None
+    for move in STANDARD_MOVE_ROSTER:
+        if move.power * TYPE_CHART_MULTIPLIER[move.type][pkm_type] > max_dmg:
+            max_dmg = move.power * TYPE_CHART_MULTIPLIER[move.type][pkm_type]  
+            best_move = move
+    return best_move
+
 def evaluate(node: AlphaBetaNode)-> int:
-    parent = node.parent
-    difference_my_hp = get_difference_old_new_hp(node.my_pkm, node.parent.my_pkm, node.parent.my_party)
-    difference_opp_hp = get_difference_old_new_hp(node.opp_pkm, node.parent.opp_pkm, node.parent.opp_party)
-    opp_modifiers = get_stats_modifiers(node.opp_pkm) + get_status_modifiers(node.opp_pkm) + get_faint_modifiers(node.my_pkm)
-    my_modifiers = get_stats_modifiers(node.my_pkm) + get_status_modifiers(node.my_pkm) + get_faint_modifiers(node.my_pkm)
-    type_modifiers = get_type_advantage_modifiers(node.my_pkm, node.opp_pkm)
-    val = 1.25 * difference_opp_hp - difference_my_hp + opp_modifiers - my_modifiers + type_modifiers
-    print(f'node value: {val}')
-    print(f'my pokemon: {node.my_pkm}, \nopponnents pkm: {node.opp_pkm}')
+    difference_my_hp = get_difference_old_new_hp(node.my_party + [node.my_pkm], node.parent.my_party + [node.parent.my_pkm])
+    difference_opp_hp = get_difference_old_new_hp(node.opp_party + [node.opp_pkm], node.parent.opp_party + [node.parent.opp_pkm])
 
-    print(f'with values :    \n  - difference_my_hp = {difference_my_hp} \
-                            \n  - difference_opp_hp = {difference_opp_hp} \
-                            \n  - opp_modifiers = {opp_modifiers} \
-                            \n  - my_modifiers = {my_modifiers} \
-                            \n  - type_modifiers = {type_modifiers}')
-    return val
+    opp_modifiers = get_status_modifiers(node.opp_pkm)  + get_faint_modifiers(node.opp_pkm)
+    my_modifiers = get_status_modifiers(node.my_pkm) + get_faint_modifiers(node.my_pkm)
+    stats_modifiers = get_stats_modifiers(node.my_stages, node.opp_stages)
+    type_modifiers = 0 #get_type_advantage_modifiers(node.my_pkm, node.opp_pkm)
 
-def get_stats_modifiers(pkm: Pkm) -> int:
-    return 0
+
+    val = 1.25 * difference_opp_hp - difference_my_hp + opp_modifiers - my_modifiers + type_modifiers + stats_modifiers
+    return val + node.parent.value 
+
+
+
+def get_stats_modifiers(stages0: List[int], stages1: List[int]) -> int:
+    return min(40 * (stages0[PkmStat.SPEED] - stages1[PkmStat.SPEED]), 40)\
+            + 20 * (stages0[PkmStat.DEFENSE] - stages1[PkmStat.DEFENSE]) \
+            + 30 * (stages0[PkmStat.ATTACK] - stages1[PkmStat.ATTACK])
+    
 
 def get_status_modifiers(pkm: Pkm) -> int:
-    return 0
+    return 60 if pkm.status in [PkmStatus.BURNED, PkmStatus.POISONED] else 0
 
 def get_faint_modifiers(pkm: Pkm) -> int:
-    return 0
+    return 500 if pkm.hp == 0 else 0
 
-def get_difference_old_new_hp(active: Pkm, old_active: Pkm, old_party: List[Pkm]) -> int:
-    if not old_active == active:
-        for pkm in old_party:
-            if pkm == active:
-                return pkm.hp - active.hp
-    else:
-        return old_active.hp - active.hp
+def get_difference_old_new_hp(team: List[Pkm], old_team: List[Pkm]) -> int:
+    old_hp = 0
+    current_hp = 0
+    for pkm in team:
+        current_hp += pkm.hp
+    for pkm in old_team:
+        old_hp += pkm.hp
+    return old_hp - current_hp
 
 def get_type_advantage_modifiers(pkm: Pkm, opp_Pkm: Pkm):
-    return 10 * TYPE_CHART_MULTIPLIER[pkm.type][opp_Pkm.type] - 20 * TYPE_CHART_MULTIPLIER[opp_Pkm.type][pkm.type]
+    return 10 * max(TYPE_CHART_MULTIPLIER[pkm.type][opp_Pkm.type]-1, 0) - 100 * max(TYPE_CHART_MULTIPLIER[opp_Pkm.type][pkm.type]-1, 0)
 
 class AlphaBetaNode():
     """
@@ -276,7 +293,10 @@ class AlphaBetaNode():
     def __init__(self, my_party: PkmTeam, opp_party: PkmTeam, weather:WeatherCondition, parent: AlphaBetaNode, player:int, depth: int, turn_end: bool, action: int):
 
 
-        
+        if action < 3:
+            self.pre_switch_type = my_party.active.type
+        else:
+            self.pre_switch_type = parent.my_pkm.type
         #the action chosen
         self.action = action
 
@@ -296,7 +316,7 @@ class AlphaBetaNode():
         self.opp_party = opp_party.party
 
         #is one of the pokemon fainted ?
-        self.is_terminal = self.my_pkm.hp == 0 or self.opp_pkm.hp == 0
+        self.is_terminal = self.opp_pkm.hp == 0
         
 
 
@@ -312,18 +332,34 @@ class AlphaBetaNode():
         #the children nodes
         self.children = []
 
-        print('new node created :')
-        print(f'  -player : {player} \n  -action : {action}')
-        print(f'  -possible actions : {self.possible_action}')
 
         #the value of the play, calculated by the eval function
         self.value = 0
         if parent != None:
             self.value = evaluate(self)
+            
 
-        
+    def __str__(self) -> str:
+        if self.parent != None:
+            return f'child of : ({self.parent.player},{self.parent.action})\nplayer : {self.player} \naction : {self.action}\npossible actions : {self.possible_action}\ndepth : {self.depth}\nvalue: {self.value}\n{self.print_evaluate()}'
+        else:
+            return f"root node\npossible actions : {self.possible_action}"
+         
 
-
+    def print_evaluate(self)-> str:
+        difference_my_hp = get_difference_old_new_hp(self.my_party + [self.my_pkm], self.parent.my_party + [self.parent.my_pkm])
+        difference_opp_hp = get_difference_old_new_hp(self.opp_party + [self.opp_pkm], self.parent.opp_party + [self.parent.opp_pkm])
+        opp_modifiers = get_status_modifiers(self.opp_pkm)  + get_faint_modifiers(self.opp_pkm)
+        my_modifiers = get_status_modifiers(self.my_pkm) - get_faint_modifiers(self.my_pkm)
+        type_modifiers = get_type_advantage_modifiers(self.my_pkm, self.opp_pkm)
+        val = 1.25 * difference_opp_hp - difference_my_hp + opp_modifiers - my_modifiers + type_modifiers + get_stats_modifiers(self.my_stages, self.opp_stages)
+        return f'with values :   \n  - difference_my_hp = {difference_my_hp} \
+                            \n  - difference_opp_hp = {difference_opp_hp} \
+                            \n  - opp_modifiers = {opp_modifiers} \
+                            \n  - my_modifiers = {my_modifiers} \
+                            \n  - type_modifiers = {type_modifiers}\
+                            \n  - parent_value = {self.parent.value}\
+                            \n  - final self value = {val}'
     
 
     def add_child(self, child: AlphaBetaNode):
@@ -333,6 +369,7 @@ class AlphaBetaNode():
         """
             get who the next player to attack will be, does NOT retrieve who is the next player to PLAY, because of priorities in some actions (i.e switching)
         """
+
         if self.turn_end:
             return 0 if self.my_stages[PkmStat.SPEED] > self.opp_stages[PkmStat.SPEED] else 1
         else:
@@ -349,7 +386,7 @@ class AlphaBetaNode():
         """
         not_fainted = []
         for i, pkm in enumerate(party):
-            if not pkm.fainted():
+            if not pkm.fainted() and (pkm.revealed or player == 0):
                 not_fainted.append((player, i + 4))
         return not_fainted
     
@@ -366,13 +403,14 @@ class AlphaBetaNode():
         """
         actions = []
         next_attacking_player = self.get_next_attacking_player()
-        print(f'next attack player: {next_attacking_player}')
         if next_attacking_player == 0:
             actions.append((0,find_best_damaging_move(my_moves, pkm_type, opp_pkm_type, my_stage[PkmStat.ATTACK], opp_stage[PkmStat.DEFENSE], weather)))
-            actions = actions + self.not_fainted_pkm_actions(0, my_party)
+            if (self.action > 3 or self.turn_end ):
+                actions = actions + self.not_fainted_pkm_actions(0, my_party)
         else:
             actions.append((1, find_best_damaging_move(opp_moves, opp_pkm_type, pkm_type, opp_stage[PkmStat.ATTACK], my_stage[PkmStat.DEFENSE], weather)))
-            actions = actions + self.not_fainted_pkm_actions(1, opp_party)
+            if (self.action > 3 or self.turn_end ):
+                actions = actions + self.not_fainted_pkm_actions(1, opp_party)
 
         if self.turn_end:
             if next_attacking_player == 0:
