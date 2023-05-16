@@ -24,6 +24,8 @@ class AlphaBetaCompetitor(Competitor):
     @property
     def battle_policy(self) -> BattlePolicy:
         return self._battle_policy
+    
+
 
 class AlphaBeta(BattlePolicy):
     def __init__(self, max_depth: int):
@@ -47,6 +49,8 @@ class AlphaBeta(BattlePolicy):
         #recursive version:
         val,node= self.alpha_beta_search(origin, g, 0, -10000, 10000)
 
+        print(node)
+
 
         #non-recursive version
         '''
@@ -66,22 +70,22 @@ class AlphaBeta(BattlePolicy):
         total = [origin]
         queue = [origin]
         while len(queue) > 0:
-            node = queue.pop()
-            queue += node.children
-            total += node.children
-            #print("\n\n\n------")
-            #print(node)
+            t_node = queue.pop()
+            queue += t_node.children
+            total += t_node.children
+            print("\n\n\n------")
+            print(t_node)
+                # print(t_node.value)
 
         while not node == origin:
             if node.player == 0:
                 choice_node = node
             node = node.parent
+
             
 
-        #print('choice :')
-        #print(choice_node.value)
-        #print(choice_node.action)
-        #print(self._max_depth)
+        print('--------\nchoice :')
+        print(choice_node)
         return choice_node.action
 
                 
@@ -93,34 +97,39 @@ class AlphaBeta(BattlePolicy):
         """
             recursive version of the alpha beta algorithm in all of it's spaghetti code beauty
         """
-
+        best_node = node
 
         if len(node.possible_action) <= 0 or (depth >= self._max_depth and node.turn_end) or node.is_terminal:
-
             return node.value, node
         else:
-            new_node: AlphaBetaNode = None
             for action in node.possible_action:
                 new_g = deepcopy(g)
                 new_state = self.take_step(node, new_g, action[1], not node.turn_end, action[0])
                 node.add_child(new_state)
-                if node.player == 0:
-                    value = -10000
-                    val, new_node = self.alpha_beta_search(new_state, new_g, depth + 1, alpha, beta)
-                    value = max(value, val)
-                    if value > beta:
-                        break
-                    alpha = max(alpha, value)
+
+                if best_node.value < new_state.value or best_node.parent == None:
+                    best_node = new_state
+
+
+                if new_state.player == 1:
+                    value_max = -10000
+                    val, new_node_max = self.alpha_beta_search(new_state, new_g, depth + 1, alpha, beta)
+                    value_max = max(value_max, val)
+                    if value_max > beta and node.turn_end:
+                        return value_max, new_node_max
+                    alpha = max(alpha, value_max)
                     
                 else:
-                    value = 10000
-                    val, new_node = self.alpha_beta_search(new_state, new_g, depth + 1, alpha, beta)
-                    value = min(value, val)
-                    if value < alpha:
-                        break
-                    beta = min(beta, value)
+                    value_min = 10000
+                    val, new_node_min = self.alpha_beta_search(new_state, new_g, depth + 1, alpha, beta)
+                    value_min = min(value_min, val)
+                    if value_min < alpha and node.turn_end:
+
+                        return value_min, new_node_min
+                    beta = min(beta, value_min)
+        node.value = best_node.value
+        return node.value, best_node
             
-            return new_node.value, new_node
             
 
             
@@ -252,25 +261,26 @@ def evaluate(node: AlphaBetaNode)-> int:
     opp_modifiers = get_status_modifiers(node.opp_pkm)  + get_faint_modifiers(node.opp_pkm)
     my_modifiers = get_status_modifiers(node.my_pkm) + get_faint_modifiers(node.my_pkm)
     stats_modifiers = get_stats_modifiers(node.my_stages, node.opp_stages)
-    type_modifiers = 0 #get_type_advantage_modifiers(node.my_pkm, node.opp_pkm)
+    type_modifiers = get_type_advantage_modifiers(node.my_pkm, node.opp_pkm)
 
 
     val = 1.25 * difference_opp_hp - difference_my_hp + opp_modifiers - my_modifiers + type_modifiers + stats_modifiers
+    print(f'real value for ({node.player}, {node.action}) is : {val+ node.parent.value}')
     return val + node.parent.value 
 
 
 
 def get_stats_modifiers(stages0: List[int], stages1: List[int]) -> int:
-    return min(40 * (stages0[PkmStat.SPEED] - stages1[PkmStat.SPEED]), 40)\
-            + 20 * (stages0[PkmStat.DEFENSE] - stages1[PkmStat.DEFENSE]) \
-            + 30 * (stages0[PkmStat.ATTACK] - stages1[PkmStat.ATTACK])
+    return min(50 * (stages0[PkmStat.SPEED] - stages1[PkmStat.SPEED]), 50)\
+            + 10 * (stages0[PkmStat.DEFENSE] - stages1[PkmStat.DEFENSE]) \
+            + 20 * (stages0[PkmStat.ATTACK] - stages1[PkmStat.ATTACK])
     
 
 def get_status_modifiers(pkm: Pkm) -> int:
-    return 60 if pkm.status in [PkmStatus.BURNED, PkmStatus.POISONED] else 0
+    return 40 if pkm.status in [PkmStatus.BURNED, PkmStatus.POISONED] else 0
 
 def get_faint_modifiers(pkm: Pkm) -> int:
-    return 500 if pkm.hp == 0 else 0
+    return 100 if pkm.hp == 0 else 0
 
 def get_difference_old_new_hp(team: List[Pkm], old_team: List[Pkm]) -> int:
     old_hp = 0
@@ -337,6 +347,7 @@ class AlphaBetaNode():
         self.value = 0
         if parent != None:
             self.value = evaluate(self)
+
             
 
     def __str__(self) -> str:
