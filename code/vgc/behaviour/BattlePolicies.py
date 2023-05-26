@@ -604,9 +604,9 @@ class MonteCarloNode():
         self.parent_action = parent_action
         self.children = []
         self._number_of_visits = 0
-        self._results = defaultdict(int)
-        self._results[1] = 0
-        self._results[-1] = 0
+        self._results = [0, 0] #defaultdict(int)
+        # self._results[1] = 0
+        # self._results[-1] = 0
         #self._untried_actions:list = None
         self._untried_actions:list = untried_actions
         return
@@ -623,13 +623,10 @@ class MonteCarloPlayer(BattlePolicy):
         #self.root = MonteCarloNode()
         #self.node_queue: List = [self.root]
     
-    def random_opponent_action(self):
-        n_actions: int = DEFAULT_PKM_N_MOVES + DEFAULT_PARTY_SIZE
-
-        pi: List[float] = ([(1. - .15) / DEFAULT_PKM_N_MOVES] * DEFAULT_PKM_N_MOVES) + (
-                [.15 / DEFAULT_PARTY_SIZE] * DEFAULT_PARTY_SIZE)
-
-        return np.random.choice(n_actions, p=pi)
+    def random_opponent_action(self, g):
+        #min = Minimax()
+        #return min.get_action(g)
+        return 0
 
     def requires_encode(self) -> bool:
         return False
@@ -646,19 +643,19 @@ class MonteCarloPlayer(BattlePolicy):
     
     def q(self, node:MonteCarloNode):
         wins = node._results[1]
-        loses = node._results[-1]
+        loses = node._results[0]
         return wins - loses
 
 
     def expand(self, node: MonteCarloNode):
-        
+        state = deepcopy(node.state)
         action = node._untried_actions.pop()   #our
-        opp_action = self.random_opponent_action() #opponent
+        opp_action = self.random_opponent_action(state) #opponent
         actions = [action, opp_action]
-        next_state = node.state.step(actions)# state of the entire game
-        untried_actions = self.untried_actions(next_state[0][0])
+        state.step(actions)# state of the entire game
+        untried_actions = self.untried_actions(state)
         child_node = MonteCarloNode(
-            next_state[0][0], untried_actions, parent=node, parent_action=action)
+            state, untried_actions, parent=node, parent_action=action)
 
         node.children.append(child_node)
         return child_node 
@@ -670,7 +667,7 @@ class MonteCarloPlayer(BattlePolicy):
         return self.is_game_over(node.state)
 
     def rollout(self, node: MonteCarloNode):
-        current_rollout_state = node.state
+        current_rollout_state = deepcopy(node.state)
         
         while not self.is_game_over(current_rollout_state):
         
@@ -678,9 +675,10 @@ class MonteCarloPlayer(BattlePolicy):
             #print(current_rollout_state.teams[0].active.hp)
 
             action = self.rollout_policy(possible_moves)
-            opp_action = self.random_opponent_action() #opponent
+            opp_action = self.random_opponent_action(current_rollout_state) #opponent
             actions = [action, opp_action]
-            current_rollout_state = current_rollout_state.step(actions)[0][0]
+            current_rollout_state.step(actions)
+
         return self.game_result(current_rollout_state)
     
     def backpropagate(self, result, node:MonteCarloNode):
@@ -714,11 +712,16 @@ class MonteCarloPlayer(BattlePolicy):
         return current_node
 
     def best_action(self,node: MonteCarloNode):
-        simulation_no = 1000
+        simulation_no = 100
         for i in range(simulation_no):
             v = self._tree_policy(node)
             reward = self.rollout(v)
             self.backpropagate(reward, v)
+
+        for c in node.children:
+            print(f"action {c.parent_action}., loses: {c._results[0]}.")
+            print(f"action {c.parent_action}., wins: {c._results[1]}.")
+            print("-----------------------------------------------------")
         return self.best_child(node, c_param=0.)
     
     def get_legal_actions(self, g: GameState): 
@@ -749,12 +752,12 @@ class MonteCarloPlayer(BattlePolicy):
         on your state corresponding to win,
         draw or a loss.
         '''
-        if(len(g.teams[0].get_not_fainted()) > 0):
-            return 1
-        if(len(g.teams[0].get_not_fainted()) <= 0 and len(g.teams[1].get_not_fainted()) <= 0):
-            return 0
-        if len(g.teams[0].get_not_fainted()) <= 0 :
-            return -1
+        if(g.teams[0].active.fainted() and len(g.teams[0].get_not_fainted())==0):
+            return 0 #-1
+        if(g.teams[1].active.fainted() and len(g.teams[1].get_not_fainted())==0):
+            return 1 #1
+        """if len(g.teams[0].get_not_fainted()) <= 0 :
+            return 0"""
 
     def get_action(self, g: GameState) -> int:  # g: PkmBattleEnv
         untried_actions = self.untried_actions(g)

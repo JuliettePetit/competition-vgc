@@ -2,13 +2,13 @@ from multiprocessing.connection import Client
 
 from vgc.engine.PkmBattleEnv import PkmBattleEnv
 
-from vgc.behaviour.BattlePolicies import PrunedBFS
+from vgc.behaviour.BattlePolicies import FirstPlayer
 from vgc.behaviour.BattlePolicies import Minimax
 from vgc.behaviour.BattlePolicies import MonteCarloPlayer
 from vgc.util.generator.PkmTeamGenerators import RandomTeamGenerator
 
 a0 = MonteCarloPlayer()
-a1 = Minimax()
+a1 = FirstPlayer()
 address = ('localhost', 8000)
 gen = RandomTeamGenerator()
 full_team0 = gen.get_team()
