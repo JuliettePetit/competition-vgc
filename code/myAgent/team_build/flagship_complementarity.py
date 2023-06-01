@@ -25,17 +25,17 @@ class FlagShipComplementarity(TeamBuildPolicy):
         team builder which centers the build around a main pokemon (the flagship pokemon). 
     """
 
-    def __init__(self, roster_size=20):
+    def __init__(self, roster_size: int = 20, nb_matchup: int = 3):
         #lis of score where the placement is the id of the pkm
         self.pkm_scores: List[int]
 
         #list of pkm ids sorted by score (descending)
         self.pkm_ranking: List[int] = []
 
-        self.pkm_complementarity: Dict[Pkm, List[Pkm]]
+        self.pkm_complementarity: Dict[Pkm, List[Pkm]] = dict()
 
         self.matchup_agent = TypeSelector()
-        self.nb_matchup = 5
+        self.nb_matchup = nb_matchup
 
         self.roster_size = roster_size
 
@@ -59,39 +59,45 @@ class FlagShipComplementarity(TeamBuildPolicy):
                 if j != 0:
                     self.score_matchup(i, pkm0, j + i, pkm1)
             self.insert_pkm_ranking(i)
-        self.trim_roster(pkms)
+        self.trim_and_set_roster(pkms)
 
-        print(len(self.usable_roster))
-        print(len(self.pkm_scores))
-        print(len(self.pkm_ranking))
 
 
     def find_sinergies_in_usable_roster(self):
         for pkm in self.usable_roster:
-            self.find_pkm_type_sinergies(pkm)
-            self.find_pkm_move_sinergies(pkm)
+            self.pkm_complementarity[pkm] += self.find_pkm_type_sinergies(pkm)
+            self.pkm_complementarity[pkm] += self.find_pkm_move_sinergies(pkm)
     
     def find_pkm_type_sinergies(self, pkm: Pkm):
-        pass
+        comp = []
+        for other in self.usable_roster:
+            if is_complementary(pkm.type, other.type):
+                comp.append(other)
+                
+        return [comp]
 
     def find_pkm_move_sinergies(self, pkm: Pkm):
-        pass
+        for pkm in self.usable_roster:      #potential expansion : we consider moves instead of simply type
+            pass
+        return []
 
-    def trim_roster(self, roster: List[Pkm]):
+    def trim_and_set_roster(self, roster: List[Pkm]):
         pkms = []
         viewed_type = []
         final_ranking = self.pkm_ranking[:self.roster_size]
         final_score = self.pkm_scores[:self.roster_size]
+
         for i in final_ranking:
             pkms.append(roster[i])
             if not roster[i].type in viewed_type:
                 viewed_type.append(roster[i].type)
 
         fill_in_roster = self.fill_missing_pkm(roster, viewed_type)
-        pkms += fill_in_roster
+        
         while len(fill_in_roster) > 0:
             final_ranking.append(self.pkm_ranking[fill_in_roster[0]])
             final_score.append(self.pkm_scores[fill_in_roster[0]])
+            pkms.append(roster[fill_in_roster[0]])
             fill_in_roster.pop(0)
        
 
@@ -99,6 +105,10 @@ class FlagShipComplementarity(TeamBuildPolicy):
         self.roster_size = len(pkms)
         self.pkm_scores = final_score
         self.pkm_ranking = final_ranking
+
+        for pkm in self.usable_roster:
+            pkm.reset()
+            self.pkm_complementarity[pkm] = []
 
 
 
@@ -154,5 +164,23 @@ class FlagShipComplementarity(TeamBuildPolicy):
         self.pkm_scores[pkm1_id] += final_scores[1]
 
 
+    def get_flagship(self):
+        return self.usable_roster[0]
+    
+    def get_complementary(self, pkm: Pkm):
+        if len(self.pkm_complementarity[pkm]) > 1:
+            return self.pkm_complementarity[pkm][:2]
+        else:
+            return self.usable_roster[1:3]
+
     def get_action(self, meta: MetaData) -> PkmFullTeam: 
-        return PkmFullTeam(self.usable_roster[:3])
+        flagship = self.get_flagship()
+        team = self.get_complementary(flagship)
+        team.insert(0, flagship)
+        return PkmFullTeam(team)
+    
+def is_complementary(pkm_0_type: PkmType, pkm_1_type: PkmType):
+    res = 0
+    for i in TYPE_CHART_MULTIPLIER:
+        res += abs(TYPE_CHART_MULTIPLIER[pkm_0_type][i] - TYPE_CHART_MULTIPLIER[pkm_1_type][i])
+    return True if res >= 3 else False
