@@ -11,7 +11,7 @@ from vgc.datatypes.Types import PkmType
 
 from vgc.balance.meta import MetaData
 from vgc.behaviour import TeamBuildPolicy, BattlePolicy
-from vgc.behaviour.BattlePolicies import FirstPlayer, Minimax, TypeSelector, RandomPlayer
+from vgc.behaviour.BattlePolicies import FirstPlayer, Minimax, OneTurnLookahead, TypeSelector, RandomPlayer
 from vgc.datatypes.Constants import DEFAULT_PKM_N_MOVES, DEFAULT_TEAM_SIZE, MAX_HIT_POINTS
 from vgc.datatypes.Objects import Pkm, PkmTemplate, PkmFullTeam, PkmRoster, PkmTeam
 from vgc.engine.PkmBattleEnv import PkmBattleEnv
@@ -44,7 +44,8 @@ class GeneticAlgorithmTeamBuilding(TeamBuildPolicy):
         pkm_list: List[Pkm] = []
         for pt in roster:
             pkm_list.append(pt.gen_pkm([0, 1, 2, 3]))
-        self.roster = purify_roster(pkm_list)
+        # self.roster = purify_roster(pkm_list)
+        self.roster = pkm_list
         self.genetic = GeneticAlgorithm(self.roster)
         
 
@@ -141,32 +142,53 @@ class GeneticAlgorithm():
     """
         Application of a genetic algorithm as a team building agent. 
     """
-    def __init__(self, roster: List[Pkm], mutation_chances: float = 0.10, crossover_points: int = 6) -> None:
-        self.nb_pop: int = 15
+    def __init__(self, roster: List[Pkm], mutation_chances: float = 0.25, crossover_points: int = 6, nb_iterations: int = 10) -> None:
+        self.nb_pop: int = 10
         self.population: List[Chromosome] = []
-        self.nb_iterations: int = 30
-        self.current_generation: int = 0
+        self.nb_iterations: int = nb_iterations
         self.mutation_chances = mutation_chances
         self.crossover_points = crossover_points
         self.roster = roster
+        self.current_generation: int = 0
         self.initialize_population(roster)
+        self.initialize_reference_population(roster)
 
     def start(self):
         while self.current_generation < self.nb_iterations:
+            print('qweqwe')
             self.fit_population()
+
             self.population = self.population[:self.nb_pop] + self.new_generation() 
             self.current_generation += 1
         self.fit_population()
         return self.population[0].actual_team
 
+    def start_x_teams(self):
+        pop = []
+        for _ in range (3):
+            team = self.start()
+            pop.append(team)
+            for pkm in team :
+                self.roster.remove(pkm)
+            self.initialize_population(self.roster)
+            self.initialize_reference_population(self.roster)
+            self.current_generation = 0
+        return pop
 
+
+    def initialize_reference_population(self, roster:list[Pkm]):
+        reference_nb = 20
+        self.reference_population = []
+        for _ in range (reference_nb):
+            self.reference_population.append(random.choices(roster, k=3))
+        
 
     def initialize_population(self, roster:list[Pkm]):
         """
         initializes the first generation of teams
         """
         roster = roster[:len(roster) - int(len(roster)%3)]
-        list = []
+        self.population = []
         for i in range (len(roster)//3):
             team = roster[i : i+3]
             c = Chromosome()
@@ -177,16 +199,15 @@ class GeneticAlgorithm():
         """
             matches within the roster to determine each chromosome's fitness value.
         """
-        nb_matchup = 5
-        over = (len(self.population) - 1) * nb_matchup
+        nb_matchup = 3
+        over = (len(self.reference_population) - 1) * nb_matchup
         self.reset_fitness()
         battle_agent = FirstPlayer()
         for i, ch in enumerate(self.population):
-            for chi in self.population[i + 1: ]:
-                score = score_matchup(ch.actual_team, chi.actual_team, battle_agent, nb_matchup)
+            for team in self.reference_population:
+                score = score_matchup(ch.actual_team, team, battle_agent, nb_matchup)
                 ch.fitness += score[0]
-                chi.fitness += score[1]
-            print(ch.fitness)
+            # print(ch.fitness)
             ch.fitness = ch.fitness / over
         self.population.sort(reverse=True)
         print(f'-------------------------\nGeneration {self.current_generation} : \n  - The best fitness is {self.population[0].fitness}\n  - The worst fitness is {self.population[len(self.population)-1].fitness} ')
@@ -274,7 +295,10 @@ class GeneticAlgorithm():
             if random.random() < self.mutation_chances:
                 types.append(get_random_type([t]))
             else:
-                types.append(t)                  
+                types.append(t)    
+
+        if random.random() < self.mutation_chances:
+            chromosome.minimum_hp = random.randint(100, 240)
         chromosome.moves = moves
         chromosome.types = types
 
@@ -285,7 +309,7 @@ def purify_roster(pkm_list: List[Pkm]):
     battle_agent = RandomPlayer()
     for i, pkm0 in enumerate (pkm_list):
             for j, pkm1 in enumerate (pkm_list[i+1:]):
-                score = score_matchup([pkm0], [pkm1], battle_agent, 3)
+                score = score_matchup([pkm0], [pkm1], battle_agent, 1)
                 pkm_scores[j] += score[0]
                 pkm_scores[i+j -1] += score[1]
             insert_pkm_ranking(i, pkm_ranking, pkm_scores)
@@ -307,8 +331,6 @@ def score_matchup(team0: List[Pkm], team1: List[Pkm], matchup_agent: BattlePolic
             a0 = matchup_agent.get_action(s[0])
             a1 = matchup_agent.get_action(s[1])
             s, r, t, _ = env.step([a0, a1])
-            # final_scores[0] += r[0]
-            # final_scores[1] += r[1]
         final_scores[env.winner] += 1
     s = env.reset()
     return final_scores
